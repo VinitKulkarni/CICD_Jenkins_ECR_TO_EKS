@@ -1,0 +1,57 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_ACC_ID = '372843597997'
+        AWS_DEFAULT_REGION = 'ap-south-1'
+        ECR_REGISTRY = '372843597997.dkr.ecr.ap-south-1.amazonaws.com'
+        DOCKER_IMAGE_NAME = 'backend-image'
+        IMAGE_TAG = 'latest'
+        //${env.BUILD_NUMBER}
+    }
+
+    stages {
+        stage('git pull') {
+            steps{
+                git 'https://github.com/VinitKulkarni/new_chatapp.git/'
+                echo "GIT PULL COMPLETED###"
+            }
+        }
+        stage('build image') {
+            steps {
+                script {
+                    docker.build "${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
+                    echo "DOCKER BUILD COMPLETED###"
+                }
+            } 
+        }
+        stage('push image'){
+            steps {
+                script {
+                    // Log in to ECR
+                    sh "aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${ECR_REGISTRY}"
+                    echo "LOGIN COMPLETED###"
+                    
+                    // Tag the image (this will work)
+                    sh "docker tag ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} ${ECR_REGISTRY}/${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
+                    
+                    
+                    // Push the image to ECR
+                    sh "docker push ${ECR_REGISTRY}/${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
+                    
+                    echo "DOCKER IMAGE PUSH COMPLETED###"
+                    
+                    // Clean up - remove local images
+                    //sh "docker rmi -f ${DOCKER_IMAGE_NAME}:${env.BUILD_NUMBER}"
+                }
+            }
+        }
+        stage('deploy'){
+            steps {
+                sshagent(['eks-cluster']) {
+                    sh "ssh -o StrictHostKeyChecking=no ubuntu@10.0.1.34 'bash /usr/local/bin/runscript.sh'"
+                }
+            }
+        }
+    }
+}
